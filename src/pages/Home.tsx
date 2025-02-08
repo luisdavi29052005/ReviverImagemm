@@ -126,7 +126,7 @@ export function Home() {
             transition={{ type: "spring", stiffness: 300 }}
           >
             <img 
-              src="/src/Imgs/Duda_.png" 
+              src="/Duda_.png" 
               alt="Reviver Imagem Logo" 
               className="w-8 h-8 object-contain"
             />
