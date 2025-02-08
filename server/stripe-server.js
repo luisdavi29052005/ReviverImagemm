@@ -14,7 +14,7 @@ if (fs.existsSync('.env')) {
 
 // 🔹 Configurar express e middleware
 const app = express();
-app.use(cors({ origin: '*', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type', 'Authorization'], credentials: true }));
+app.use(cors({ origin: 'https://www.reviverimagem.shop' }));
 app.use(express.json());
 
 // 🔹 Inicializar Firebase Admin

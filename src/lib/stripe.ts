@@ -5,6 +5,9 @@ import { auth } from './firebase';
 const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
 const stripePromise = loadStripe(STRIPE_PUBLIC_KEY);
 
+// Usa a variável de ambiente para definir a base da API
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://www.reviverimagem.shop/api";
+
 export async function createCheckoutSession(plan: CreditPlan) {
   try {
     const user = auth.currentUser;
@@ -12,7 +15,7 @@ export async function createCheckoutSession(plan: CreditPlan) {
       throw new Error('User not authenticated');
     }
 
-    const response = await fetch('http://localhost:5000/api/create-checkout-session', {
+    const response = await fetch(`${API_BASE_URL}/create-checkout-session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -31,7 +34,7 @@ export async function createCheckoutSession(plan: CreditPlan) {
 
     const session = await response.json();
 
-    // Redirect to Stripe Checkout
+    // Redireciona para o Stripe Checkout
     const stripe = await stripePromise;
     if (!stripe) {
       throw new Error('Failed to load Stripe');
@@ -52,14 +55,12 @@ export async function createCheckoutSession(plan: CreditPlan) {
 
 export async function handlePaymentSuccess(sessionId: string) {
   try {
-    const response = await fetch('http://localhost:5000/api/verify-payment', {
+    const response = await fetch(`${API_BASE_URL}/verify-payment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        sessionId,
-      }),
+      body: JSON.stringify({ sessionId }),
     });
 
     if (!response.ok) {
