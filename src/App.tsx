@@ -9,6 +9,7 @@ import { Payment } from './pages/Payment';
 import { Settings } from './pages/Settings';
 import MyImages from './pages/MyImages';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import { SpeedInsights } from "@vercel/speed-insights/react"; // ✅ Importando o Speed Insights
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [user, loading] = useAuthState(auth);
@@ -26,35 +27,38 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route
-        path="/my-images"
-        element={
-          <ProtectedRoute>
-            <MyImages />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/payment/*"
-        element={
-          <ProtectedRoute>
-            <Payment />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute>
-            <Settings />
-          </ProtectedRoute>
-        }
-      />
-    </Routes>
+    <>
+      <SpeedInsights /> {/* ✅ Adicionando para coletar métricas */}
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route
+          path="/my-images"
+          element={
+            <ProtectedRoute>
+              <MyImages />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payment/*"
+          element={
+            <ProtectedRoute>
+              <Payment />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </>
   );
 }
 
