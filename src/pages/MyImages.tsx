@@ -236,7 +236,7 @@ function MyImages() {
               <motion.img 
                 whileHover={{ scale: 1.1, rotate: 360 }}
                 transition={{ duration: 0.6 }}
-                src="/src/Imgs/Duda_.png" 
+                src="/Duda_.png" 
                 alt="Logo" 
                 className="w-8 h-8"
               />

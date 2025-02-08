@@ -431,7 +431,7 @@ export function Home() {
                 <div
                   className="absolute inset-0 w-full h-full"
                   style={{
-                    backgroundImage: 'url("/src/Imgs/Depois.png")',
+                    backgroundImage: 'url("/Depois.png")',
                     backgroundSize: 'cover',
                     backgroundPosition: 'center'
                   }}
@@ -441,7 +441,7 @@ export function Home() {
                 <div
                   className="absolute inset-0 w-full h-full"
                   style={{
-                    backgroundImage: 'url("/src/Imgs/Antes.png")',
+                    backgroundImage: 'url("/Antes.png")',
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                     clipPath: `polygon(0 0, ${sliderPosition}% 0, ${sliderPosition}% 100%, 0 100%)`
@@ -631,7 +631,7 @@ export function Home() {
             <div>
               <div className="flex items-center space-x-2 mb-4">
                 <img 
-                  src="/src/Imgs/Duda_.png" 
+                  src="/Duda_.png" 
                   alt="Reviver Imagem Logo" 
                   className="w-6 h-6 md:w-8 md:h-8 object-contain"
                 />
