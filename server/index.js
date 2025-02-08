@@ -12,7 +12,7 @@ const app = express();
 
 // Configurar CORS para permitir requisições do frontend
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: 'https://www.reviverimagem.shop',
   methods: ['GET', 'POST'],
   credentials: true
 }));
@@ -74,8 +74,8 @@ app.post('/create-checkout-session', async (req, res) => {
         },
       ],
       mode: 'payment',
-      success_url: `http://localhost:3000/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `http://localhost:3000/payment/cancel`,
+      success_url: `https://www.reviverimagem.shop/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `https://www.reviverimagem.shop/payment/cancel`,
       customer_email: userEmail,
       metadata: {
         userId,

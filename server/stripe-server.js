@@ -41,7 +41,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
 
 // 🔹 Definir domínio base
-const DOMAIN = process.env.DOMAIN || 'http://localhost:3000';
+const DOMAIN = process.env.DOMAIN || 'https://www.reviverimagem.shop';
 
 // 🏦 Criar sessão de pagamento Stripe
 app.post('/api/create-checkout-session', async (req, res) => {
@@ -74,7 +74,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       ],
       mode: 'payment',
       success_url: `${DOMAIN}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${DOMAIN}/payment/cancel`,
+      cancel_url: `${DOMAIN}/payment/cancelsession_id={CHECKOUT_SESSION_ID}`,
       customer_email: userEmail,
       metadata: { userId, planId, credits: plan.credits.toString() },
     });
