@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Check, X, Clock } from 'lucide-react';
-import { handlePaymentSuccess } from '../lib/stripe';
+import { getSubscriptionStatus } from '../lib/stripe';
 
 export function Payment() {
   const [searchParams] = useSearchParams();
@@ -11,7 +11,7 @@ export function Payment() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    const verifyPayment = async () => {
+    const verifySubscription = async () => {
       try {
         const sessionId = searchParams.get('session_id');
         
@@ -21,14 +21,14 @@ export function Payment() {
           return;
         }
 
-        const result = await handlePaymentSuccess(sessionId);
+        const subscriptionStatus = await getSubscriptionStatus();
         
-        if (result.success) {
+        if (subscriptionStatus.status === 'active') {
           setStatus('success');
-          setMessage('Pagamento processado com sucesso! Seus créditos foram adicionados.');
+          setMessage('Assinatura ativada com sucesso! Seus créditos diários já estão disponíveis.');
         } else {
           setStatus('failed');
-          setMessage(result.error || 'Falha ao processar o pagamento');
+          setMessage('Falha ao ativar a assinatura');
         }
 
         // Redirect after delay
@@ -36,13 +36,13 @@ export function Payment() {
           navigate('/my-images');
         }, 3000);
       } catch (error) {
-        console.error('Error verifying payment:', error);
+        console.error('Error verifying subscription:', error);
         setStatus('failed');
-        setMessage('Erro ao verificar o pagamento. Por favor, contate o suporte.');
+        setMessage('Erro ao verificar a assinatura. Por favor, contate o suporte.');
       }
     };
 
-    verifyPayment();
+    verifySubscription();
   }, [searchParams, navigate]);
 
   const statusConfig = {
@@ -51,21 +51,21 @@ export function Payment() {
       color: 'text-yellow-500',
       bgColor: 'bg-yellow-500/20',
       borderColor: 'border-yellow-500',
-      title: 'Processando pagamento'
+      title: 'Processando assinatura'
     },
     success: {
       icon: Check,
       color: 'text-green-500',
       bgColor: 'bg-green-500/20',
       borderColor: 'border-green-500',
-      title: 'Pagamento aprovado!'
+      title: 'Assinatura ativada!'
     },
     failed: {
       icon: X,
       color: 'text-red-500',
       bgColor: 'bg-red-500/20',
       borderColor: 'border-red-500',
-      title: 'Falha no pagamento'
+      title: 'Falha na assinatura'
     }
   };
 

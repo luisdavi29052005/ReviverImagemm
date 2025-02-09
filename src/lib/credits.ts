@@ -1,20 +1,22 @@
-import { db, COLLECTIONS } from './firebase';
 import { 
-  collection, 
   doc, 
   getDoc, 
   updateDoc, 
-  addDoc, 
-  query, 
-  where, 
+  increment, 
+  collection,
+  query,
+  where,
+  orderBy,
   getDocs,
-  serverTimestamp,
-  Timestamp
+  addDoc,
+  Timestamp,
+  type DocumentData
 } from 'firebase/firestore';
-import type { User, Transaction, ProcessedImage, CreditPlan, RefundRequest } from '../types';
+import { db, auth } from './firebase';
+import type { Transaction, RefundRequest } from '../types';
 
-// Planos de créditos disponíveis
-export const creditPlans: CreditPlan[] = [
+// Credit plans
+export const creditPlans = [
   {
     id: 'basic',
     name: 'Básico',
@@ -38,118 +40,129 @@ export const creditPlans: CreditPlan[] = [
   }
 ];
 
-// Gerenciar créditos do usuário
+// Get user credits
 export async function getUserCredits(userId: string): Promise<number> {
-  const userRef = doc(db, COLLECTIONS.USERS, userId);
-  const userDoc = await getDoc(userRef);
-  return userDoc.data()?.credits || 0;
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    return userDoc.data()?.credits || 0;
+  } catch (error) {
+    console.error('Error fetching credits:', error);
+    return 0;
+  }
 }
 
+// Update user credits
 export async function updateUserCredits(userId: string, newCredits: number) {
-  const userRef = doc(db, COLLECTIONS.USERS, userId);
-  await updateDoc(userRef, {
-    credits: newCredits,
-    updatedAt: serverTimestamp()
-  });
-}
-
-export async function useCredit(userId: string, amount: number = 1) {
-  const currentCredits = await getUserCredits(userId);
-  if (currentCredits < amount) {
-    throw new Error('Créditos insuficientes');
-  }
-  await updateUserCredits(userId, currentCredits - amount);
-}
-
-// Gerenciar transações
-export async function createTransaction(data: Omit<Transaction, 'id' | 'createdAt'>) {
-  const transactionsRef = collection(db, COLLECTIONS.TRANSACTIONS);
-  return addDoc(transactionsRef, {
-    ...data,
-    createdAt: serverTimestamp()
-  });
-}
-
-export async function getUserTransactions(userId: string) {
-  const transactionsRef = collection(db, COLLECTIONS.TRANSACTIONS);
-  const q = query(transactionsRef, where('userId', '==', userId));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    createdAt: (doc.data().createdAt as Timestamp).toDate()
-  }));
-}
-
-// Gerenciar imagens processadas
-export async function saveProcessedImage(data: Omit<ProcessedImage, 'id' | 'createdAt'>) {
-  const imagesRef = collection(db, COLLECTIONS.PROCESSED_IMAGES);
-  return addDoc(imagesRef, {
-    ...data,
-    createdAt: serverTimestamp()
-  });
-}
-
-export async function getUserProcessedImages(userId: string) {
-  const imagesRef = collection(db, COLLECTIONS.PROCESSED_IMAGES);
-  const q = query(imagesRef, where('userId', '==', userId));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    createdAt: (doc.data().createdAt as Timestamp).toDate()
-  }));
-}
-
-// Sistema de Reembolso
-export async function requestRefund(data: Omit<RefundRequest, 'id' | 'createdAt' | 'status'>) {
-  const refundsRef = collection(db, COLLECTIONS.REFUND_REQUESTS);
-  return addDoc(refundsRef, {
-    ...data,
-    status: 'pending',
-    createdAt: serverTimestamp()
-  });
-}
-
-export async function getUserRefundRequests(userId: string) {
-  const refundsRef = collection(db, COLLECTIONS.REFUND_REQUESTS);
-  const q = query(refundsRef, where('userId', '==', userId));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    createdAt: (doc.data().createdAt as Timestamp).toDate(),
-    updatedAt: doc.data().updatedAt ? (doc.data().updatedAt as Timestamp).toDate() : null
-  }));
-}
-
-export async function updateRefundStatus(refundId: string, status: 'pending' | 'approved' | 'rejected', reason?: string) {
-  const refundRef = doc(db, COLLECTIONS.REFUND_REQUESTS, refundId);
-  await updateDoc(refundRef, {
-    status,
-    updatedAt: serverTimestamp(),
-    ...(reason && { reason })
-  });
-
-  // If approved, update transaction status and user credits
-  if (status === 'approved') {
-    const refundDoc = await getDoc(refundRef);
-    const refundData = refundDoc.data() as RefundRequest;
-
-    // Update transaction status
-    const transactionRef = doc(db, COLLECTIONS.TRANSACTIONS, refundData.transactionId);
-    await updateDoc(transactionRef, {
-      status: 'refunded',
-      updatedAt: serverTimestamp()
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      credits: newCredits,
+      updatedAt: Timestamp.now()
     });
-
-    // Update user credits
-    const currentCredits = await getUserCredits(refundData.userId);
-    await updateUserCredits(refundData.userId, currentCredits - refundData.credits);
+  } catch (error) {
+    console.error('Error updating credits:', error);
+    throw new Error('Failed to update credits');
   }
 }
 
-// Verifica se uma transação é elegível para reembolso (até 7 dias após a compra)
+// Use credits
+export async function useCredit(userId: string, amount: number = 1) {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    const currentCredits = userDoc.data()?.credits || 0;
+
+    if (currentCredits < amount) {
+      throw new Error('Créditos insuficientes');
+    }
+
+    await updateDoc(userRef, {
+      credits: increment(-amount),
+      updatedAt: Timestamp.now()
+    });
+  } catch (error) {
+    console.error('Error using credits:', error);
+    throw error;
+  }
+}
+
+// Get user transactions
+export async function getUserTransactions(userId: string): Promise<Transaction[]> {
+  try {
+    const transactionsRef = collection(db, 'transactions');
+    const q = query(
+      transactionsRef,
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate()
+    })) as Transaction[];
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    return [];
+  }
+}
+
+// Create transaction
+export async function createTransaction(data: Omit<Transaction, 'id' | 'createdAt'>) {
+  try {
+    const transactionsRef = collection(db, 'transactions');
+    const docRef = await addDoc(transactionsRef, {
+      ...data,
+      createdAt: Timestamp.now()
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating transaction:', error);
+    throw error;
+  }
+}
+
+// Request refund
+export async function requestRefund(data: Omit<RefundRequest, 'id' | 'createdAt' | 'status'>) {
+  try {
+    const refundsRef = collection(db, 'refundRequests');
+    await addDoc(refundsRef, {
+      ...data,
+      status: 'pending',
+      createdAt: Timestamp.now()
+    });
+  } catch (error) {
+    console.error('Error requesting refund:', error);
+    throw error;
+  }
+}
+
+// Get user refund requests
+export async function getUserRefundRequests(userId: string) {
+  try {
+    const refundsRef = collection(db, 'refundRequests');
+    const q = query(
+      refundsRef,
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate(),
+      updatedAt: doc.data().updatedAt?.toDate() || null
+    }));
+  } catch (error) {
+    console.error('Error fetching refund requests:', error);
+    return [];
+  }
+}
+
+// Check if transaction is eligible for refund
 export function isRefundEligible(transaction: Transaction): boolean {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
