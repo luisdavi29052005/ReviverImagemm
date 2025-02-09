@@ -27,7 +27,7 @@ export async function processImage(file: File, settings: ImageProcessingSettings
 
     console.log('Sending request to process image...');
 
-    const response = await fetch('http://localhost:5000/upload', {
+    const response = await fetch('https://pythonflask-production-dcf9.up.railway.app/upload', {
       method: 'POST',
       body: formData,
     });
