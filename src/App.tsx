@@ -8,6 +8,7 @@ import { Home } from './pages/Home';
 import { Payment } from './pages/Payment';
 import { Settings } from './pages/Settings';
 import MyImages from './pages/MyImages';
+import { Analytics } from "@vercel/analytics/react";
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { SpeedInsights } from "@vercel/speed-insights/react"; // ✅ Importando o Speed Insights
 
@@ -29,6 +30,7 @@ function App() {
   return (
     <>
       <SpeedInsights /> {/* ✅ Adicionando para coletar métricas */}
+      <Analytics /> {/* ✅ Adicionando o Analytics da Vercel */}
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
