@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ImagePlus, Download, Settings, Image as ImageIcon, Info, Upload, Cloud, X, FileText, Home, Menu, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, getProcessedImages } from '../lib/firebase';
-import { processImage } from '../lib/imageProcessing';
+import { auth } from '../lib/firebase';
+import { processImage, getProcessedImages } from '../lib/imageProcessing';
 import { UserMenu } from '../components/UserMenu';
 import { UserCredits } from '../components/UserCredits';
 import { PricingModal } from '../components/PricingModal';
@@ -38,7 +38,7 @@ function MyImages() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedImages, setProcessedImages] = useState<ProcessedImage[]>([]);
-  const [isLoadingSaved, setIsLoadingSaved] = useState(true);
+  const [isLoadingImages, setIsLoadingImages] = useState(true);
   const [processingImages, setProcessingImages] = useState<{[key: string]: {
     originalUrl: string;
     processedUrl?: string;
@@ -51,21 +51,21 @@ function MyImages() {
   });
 
   useEffect(() => {
-    async function loadSavedImages() {
+    async function loadProcessedImages() {
       if (!user) return;
       
       try {
-        setIsLoadingSaved(true);
+        setIsLoadingImages(true);
         const images = await getProcessedImages(user.uid);
         setProcessedImages(images);
       } catch (error) {
-        console.error('Error loading saved images:', error);
+        console.error('Error loading processed images:', error);
       } finally {
-        setIsLoadingSaved(false);
+        setIsLoadingImages(false);
       }
     }
 
-    loadSavedImages();
+    loadProcessedImages();
   }, [user]);
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -153,7 +153,6 @@ function MyImages() {
       setUploadError(null);
 
       const processingId = Date.now().toString();
-
       setProcessingImages(prev => ({
         ...prev,
         [processingId]: {
@@ -163,17 +162,20 @@ function MyImages() {
 
       const processedImageUrl = await processImage(selectedImage.file, settings);
 
-      if (!processedImageUrl) {
-        throw new Error('Failed to get processed image URL');
-      }
+      const newProcessedImage: ProcessedImage = {
+        id: processingId,
+        userId: user?.uid || '',
+        originalUrl: selectedImage.preview,
+        processedUrl: processedImageUrl,
+        createdAt: new Date()
+      };
 
-      setProcessingImages(prev => ({
-        ...prev,
-        [processingId]: {
-          originalUrl: selectedImage.preview,
-          processedUrl: processedImageUrl
-        }
-      }));
+      setProcessedImages(prev => [newProcessedImage, ...prev]);
+      
+      setProcessingImages(prev => {
+        const { [processingId]: _, ...rest } = prev;
+        return rest;
+      });
 
       handleRemoveImage();
       
@@ -183,6 +185,13 @@ function MyImages() {
 
     } catch (error) {
       console.error('Error processing image:', error);
+      setUploadError(
+        error instanceof Error && error.message === 'Créditos insuficientes'
+          ? 'Você não tem créditos suficientes para processar esta imagem'
+          : error instanceof Error 
+            ? error.message 
+            : 'Falha ao processar imagem. Tente novamente.'
+      );
       
       setProcessingImages(prev => {
         const newState = { ...prev };
@@ -194,14 +203,6 @@ function MyImages() {
         }
         return newState;
       });
-
-      setUploadError(
-        error instanceof Error && error.message === 'Créditos insuficientes'
-          ? 'Você não tem créditos suficientes para processar esta imagem'
-          : error instanceof Error 
-            ? error.message 
-            : 'Falha ao processar imagem. Tente novamente.'
-      );
     } finally {
       setIsProcessing(false);
     }
@@ -236,7 +237,7 @@ function MyImages() {
               <motion.img 
                 whileHover={{ scale: 1.1, rotate: 360 }}
                 transition={{ duration: 0.6 }}
-                src="/Duda_.png" 
+                src="/src/Imgs/Duda_.png" 
                 alt="Logo" 
                 className="w-8 h-8"
               />
@@ -423,7 +424,7 @@ function MyImages() {
               </div>
               
               <div className="space-y-4">
-                {isLoadingSaved ? (
+                {isLoadingImages ? (
                   <div className="text-center py-8">
                     <RefreshCw className="w-8 h-8 text-purple-500 animate-spin mx-auto mb-4" />
                     <p className="text-gray-400">Carregando imagens...</p>
@@ -478,69 +479,69 @@ function MyImages() {
       </div>
 
       <AnimatePresence>
-  {isMobileMenuOpen && (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 z-50"
-      onClick={() => setIsMobileMenuOpen(false)}
-    >
-      <motion.div
-        initial={{ x: '100%' }}
-        animate={{ x: 0 }}
-        exit={{ x: '100%' }}
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="absolute right-0 top-0 bottom-0 w-full sm:w-80 bg-[#1C1C1E] p-4 gap-2 flex flex-col" // Adicionei gap-8 e flex-col aqui
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-700">
-  <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-purple-500">
-    <img
-      src={user?.photoURL || `https://api.dicebear.com/7.x/avatars/svg?seed=${user?.email}`}
-      alt="Foto de perfil"
-      className="w-full h-full object-cover"
-    />
-  </div>
-  <div>
-    <p className="font-medium text-white">{user?.displayName || 'Usuário'}</p>
-    <p className="text-sm text-gray-400">{user?.email}</p>
-  </div>
-</div>
-
-        {['Aprimorador', 'Gerador', 'Novo'].map((item) => (
-          <motion.button
-            key={item}
-            whileTap={{ scale: 0.95 }}
-            className={`w-full px-4 py-2 rounded-lg ${
-              item === 'Aprimorador' 
-                ? 'bg-purple-600 text-white' 
-                : 'bg-gray-700 text-gray-300'
-            }`}
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50"
+            onClick={() => setIsMobileMenuOpen(false)}
           >
-            {item}
-          </motion.button>
-        ))}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="absolute right-0 top-0 bottom-0 w-full sm:w-80 bg-[#1C1C1E] p-4 gap-2 flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-700">
+                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-purple-500">
+                  <img
+                    src={user?.photoURL || `https://api.dicebear.com/7.x/avatars/svg?seed=${user?.email}`}
+                    alt="Foto de perfil"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div>
+                  <p className="font-medium text-white">{user?.displayName || 'Usuário'}</p>
+                  <p className="text-sm text-gray-400">{user?.email}</p>
+                </div>
+              </div>
 
-<motion.button
-  whileTap={{ scale: 0.95 }}
-  onClick={() => navigate('/settings')}
-  className="w-full flex items-center justify-center px-4 py-2 rounded-lg bg-gray-700 text-gray-300"
->
-  <span>Configurações</span>
-</motion.button>
+              {['Aprimorador', 'Gerador', 'Novo'].map((item) => (
+                <motion.button
+                  key={item}
+                  whileTap={{ scale: 0.95 }}
+                  className={`w-full px-4 py-2 rounded-lg ${
+                    item === 'Aprimorador' 
+                      ? 'bg-purple-600 text-white' 
+                      : 'bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  {item}
+                </motion.button>
+              ))}
 
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={() => auth.signOut()}
-          className="w-full px-4 py-2 rounded-lg bg-red-600/20 text-red-500"
-        >
-          Sair
-        </motion.button>
-      </motion.div>
-    </motion.div>
-  )}
-</AnimatePresence>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => navigate('/settings')}
+                className="w-full flex items-center justify-center px-4 py-2 rounded-lg bg-gray-700 text-gray-300"
+              >
+                <span>Configurações</span>
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => auth.signOut()}
+                className="w-full px-4 py-2 rounded-lg bg-red-600/20 text-red-500"
+              >
+                Sair
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isSidebarOpen && (
@@ -604,3 +605,4 @@ function MyImages() {
 }
 
 export default MyImages;
+

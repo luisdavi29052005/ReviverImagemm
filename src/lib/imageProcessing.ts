@@ -1,7 +1,11 @@
 import { auth } from './firebase';
 import { useCredit } from './credits';
-import { saveProcessedImage, deleteOriginalImage } from './firebase';  // Certifique-se de que a função `deleteOriginalImage` existe
-import { ImageProcessingSettings } from '../types';
+import { supabase } from './supabase';
+import type { ImageProcessingSettings, ProcessedImage } from '../types';
+
+function sanitizeStoragePath(path: string): string {
+  return path.replace(/[^a-zA-Z0-9-_/.]/g, '_');
+}
 
 export async function processImage(file: File, settings: ImageProcessingSettings): Promise<string> {
   try {
@@ -9,12 +13,10 @@ export async function processImage(file: File, settings: ImageProcessingSettings
       throw new Error('User not authenticated');
     }
 
-    // Verificar se o arquivo é uma imagem
     if (!file.type.startsWith('image/')) {
       throw new Error('O arquivo enviado não é uma imagem válida');
     }
 
-    // Prepara os dados do formulário para o back-end
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_id', auth.currentUser.uid);
@@ -25,50 +27,112 @@ export async function processImage(file: File, settings: ImageProcessingSettings
 
     console.log('Sending request to process image...');
 
-    // Faz a requisição para o back-end FastAPI
     const response = await fetch('http://localhost:5000/upload', {
       method: 'POST',
       body: formData,
     });
 
-    // Verifica se a resposta é do tipo JSON
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new Error('Server returned invalid response format');
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to process image');
     }
 
     const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to process image');
-    }
 
     if (!data.processedImage) {
       throw new Error('Server did not return a processed image URL');
     }
 
-    // Apagar a imagem original do banco de dados
-    if (data.originalImageId) {
-      await deleteOriginalImage(data.originalImageId);  // Passando o ID da imagem original para apagar
+    // Create safe storage paths
+    const timestamp = Date.now();
+    const sanitizedUserId = sanitizeStoragePath(auth.currentUser.uid);
+    const sanitizedFileName = sanitizeStoragePath(file.name);
+    const originalFileName = `${sanitizedUserId}/${timestamp}_${sanitizedFileName}`;
+
+    // Upload original image to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('processed-images')
+      .upload(originalFileName, file, {
+        contentType: file.type,
+        cacheControl: '3600',
+      });
+
+    if (uploadError) {
+      console.error('Error uploading original image:', uploadError);
+      throw new Error('Failed to upload original image');
     }
 
-    // Salva apenas os metadados da imagem processada no Firebase
-    await saveProcessedImage({
-      userId: auth.currentUser.uid,
-      processedUrl: data.processedImage,
-      createdAt: new Date()
-    });
+    // Get public URL for original image
+    const { data: urlData } = supabase.storage
+      .from('processed-images')
+      .getPublicUrl(originalFileName);
 
-    // Deduz um crédito
+    // Save to Supabase database with correct column names
+    const { error: dbError } = await supabase
+      .from('processed_images')
+      .insert({
+        firebase_user_id: auth.currentUser.uid,
+        url_original: urlData.publicUrl,
+        url_processada: data.processedImage,
+        tamanho_do_arquivo: file.size,
+        tipo_de_arquivo: file.type,
+        configuracoes: settings,
+        criado_em: new Date().toISOString()
+      });
+
+    if (dbError) {
+      console.error('Error saving to Supabase:', dbError);
+      throw new Error('Failed to save processed image metadata');
+    }
+
     await useCredit(auth.currentUser.uid);
 
-    console.log('Successfully processed image:', data);
     return data.processedImage;
   } catch (error) {
     console.error('Error in processImage:', error);
-    if (error instanceof Error && error.message === 'Créditos insuficientes') {
+    if (error instanceof Error) {
       throw error;
     }
-    throw error instanceof Error ? error : new Error('Failed to process image');
+    throw new Error('Failed to process image');
+  }
+}
+
+export async function getProcessedImages(userId: string): Promise<ProcessedImage[]> {
+  if (!userId) {
+    console.error('No user ID provided to getProcessedImages');
+    return [];
+  }
+
+  try {
+    console.log('Fetching images for user:', userId);
+    
+    const { data, error } = await supabase
+      .from('processed_images')
+      .select('*')
+      .eq('firebase_user_id', userId)
+      .order('criado_em', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching processed images:', error);
+      throw error;
+    }
+
+    if (!data) {
+      console.log('No images found for user');
+      return [];
+    }
+
+    console.log('Found images:', data.length);
+
+    return data.map(item => ({
+      id: item.id,
+      userId: item.firebase_user_id,
+      originalUrl: item.url_original,
+      processedUrl: item.url_processada,
+      createdAt: new Date(item.criado_em)
+    }));
+  } catch (error) {
+    console.error('Error in getProcessedImages:', error);
+    return [];
   }
 }
