@@ -1,175 +1,338 @@
 import express from 'express';
 import Stripe from 'stripe';
-import admin from 'firebase-admin';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import fs from 'fs';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-// 🔹 Carregar variáveis de ambiente de forma segura
-if (fs.existsSync('.env')) {
-  dotenv.config();
-} else {
-  console.warn('Arquivo .env não encontrado! Certifique-se de definir as variáveis corretamente.');
+dotenv.config();
+
+// Initialize Stripe with error handling
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+if (!STRIPE_SECRET_KEY) {
+  throw new Error('Missing Stripe secret key');
 }
 
-// 🔹 Configurar express e middleware
+const stripe = new Stripe(STRIPE_SECRET_KEY);
 const app = express();
-app.use(cors({ origin: 'https://www.reviverimagem.shop' }));
+
+// Configure CORS to accept both production and development origins
+const allowedOrigins = [
+  'https://www.reviverimagem.shop',
+  'http://localhost:3000',
+  'http://localhost:5000'
+];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST'],
+  credentials: true,
+  optionsSuccessStatus: 200 // For legacy browser support
+}));
+
+// Parse JSON payloads
 app.use(express.json());
 
-// 🔹 Inicializar Firebase Admin
-const serviceAccountPath = 'reviviverimagem-firebase-adminsdk-fbsvc-560e24bd33.json';
+// Initialize Firebase Admin
+initializeApp({
+  credential: cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  })
+});
 
-if (fs.existsSync(serviceAccountPath)) {
-  const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf-8'));
-  if (!admin.apps.length) {
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+const db = getFirestore();
+
+// Subscription plans matching the frontend
+const subscriptionPlans = {
+  free: {
+    id: 'free',
+    name: 'Plano Gratuito',
+    credits: 10,
+    price: 0,
+    description: '10 créditos diários'
+  },
+  basic: {
+    id: 'basic',
+    name: 'Plano Básico',
+    credits: 100,
+    price: 29.90,
+    description: '100 créditos diários'
+  },
+  pro: {
+    id: 'pro',
+    name: 'Plano Profissional',
+    credits: 200,
+    price: 49.90,
+    description: '200 créditos diários'
+  },
+  enterprise: {
+    id: 'enterprise',
+    name: 'Plano Enterprise',
+    credits: 300,
+    price: 79.90,
+    description: '300 créditos diários'
   }
-} else {
-  console.error('❌ Arquivo de credenciais do Firebase não encontrado!');
-  process.exit(1);
-}
+};
 
-const db = admin.firestore();
-
-// 🔹 Inicializar Stripe
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.error('❌ STRIPE_SECRET_KEY não definido no .env!');
-  process.exit(1);
-}
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
-
-// 🔹 Definir domínio base
-const DOMAIN = process.env.DOMAIN || 'https://www.reviverimagem.shop';
-
-// 🏦 Criar sessão de pagamento Stripe
-app.post('/api/create-checkout-session', async (req, res) => {
+// Create subscription checkout session
+app.post('/create-subscription', async (req, res) => {
   try {
     const { planId, userId, userEmail } = req.body;
 
-    // 🔹 Definir planos disponíveis
-    const plans = {
-      basic: { price: 500, credits: 5, name: 'Basic Plan' },
-      standard: { price: 1000, credits: 15, name: 'Standard Plan' },
-      premium: { price: 2000, credits: 50, name: 'Premium Plan' },
-    };
+    if (!planId || !userId || !userEmail) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
 
-    // 🔹 Verificar plano válido
-    const plan = plans[planId];
-    if (!plan) return res.status(400).json({ error: 'Plano inválido' });
+    const plan = subscriptionPlans[planId];
+    if (!plan) {
+      return res.status(400).json({ error: 'Invalid plan' });
+    }
 
-    // 🔹 Criar sessão de checkout
+    // Determine the success and cancel URLs based on the request origin
+    const origin = req.get('origin') || 'http://localhost:3000';
+    const successUrl = `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${origin}/payment/cancel`;
+
     const session = await stripe.checkout.sessions.create({
+      customer_email: userEmail,
       payment_method_types: ['card'],
       line_items: [
         {
           price_data: {
             currency: 'brl',
-            product_data: { name: plan.name, description: `${plan.credits} créditos` },
-            unit_amount: plan.price,
+            product_data: {
+              name: plan.name,
+              description: `${plan.credits} créditos diários`,
+            },
+            unit_amount: Math.round(plan.price * 100), // Convert to cents
+            recurring: {
+              interval: 'month'
+            }
           },
           quantity: 1,
         },
       ],
-      mode: 'payment',
-      success_url: `${DOMAIN}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${DOMAIN}/payment/cancelsession_id={CHECKOUT_SESSION_ID}`,
-      customer_email: userEmail,
-      metadata: { userId, planId, credits: plan.credits.toString() },
+      mode: 'subscription',
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        userId,
+        planId,
+        credits: plan.credits.toString()
+      },
     });
 
     res.json({ id: session.id });
   } catch (error) {
-    console.error('❌ Erro ao criar sessão de checkout:', error);
-    res.status(500).json({ error: 'Erro ao criar checkout' });
+    console.error('Error creating subscription:', error);
+    res.status(500).json({ error: 'Failed to create subscription' });
   }
 });
 
-// 🔍 Verificar pagamento e atualizar créditos do usuário
-app.post('/api/verify-payment', async (req, res) => {
+// Update subscription
+app.post('/update-subscription', async (req, res) => {
   try {
-    const { sessionId } = req.body;
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const { userId, newPlanId } = req.body;
 
-    if (session.payment_status !== 'paid') {
-      return res.status(400).json({ error: 'Pagamento não concluído' });
+    if (!userId || !newPlanId) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const { userId, credits } = session.metadata;
-    const creditsToAdd = parseInt(credits, 10);
-    const userRef = db.collection('users').doc(userId);
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-    await db.runTransaction(async (transaction) => {
-      const userDoc = await transaction.get(userRef);
-      if (!userDoc.exists) throw new Error('Usuário não encontrado');
+    const subscriptions = await stripe.subscriptions.list({
+      customer: userDoc.data().stripeCustomerId,
+      limit: 1,
+      status: 'active'
+    });
 
-      const newCredits = (userDoc.data().credits || 0) + creditsToAdd;
+    if (subscriptions.data.length === 0) {
+      return res.status(404).json({ error: 'No active subscription found' });
+    }
 
-      transaction.update(userRef, {
-        credits: newCredits,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+    const subscription = subscriptions.data[0];
+    const plan = subscriptionPlans[newPlanId];
 
-      const transactionRef = db.collection('transactions').doc();
-      transaction.set(transactionRef, {
-        userId,
-        amount: session.amount_total / 100,
-        credits: creditsToAdd,
-        status: 'completed',
-        paymentId: session.payment_intent,
-        paymentMethod: 'stripe',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+    if (!plan) {
+      return res.status(400).json({ error: 'Invalid plan' });
+    }
+
+    const updatedSubscription = await stripe.subscriptions.update(subscription.id, {
+      items: [{
+        id: subscription.items.data[0].id,
+        price_data: {
+          currency: 'brl',
+          product_data: {
+            name: plan.name,
+            description: `${plan.credits} créditos diários`,
+          },
+          unit_amount: Math.round(plan.price * 100),
+          recurring: {
+            interval: 'month'
+          }
+        }
+      }],
+      proration_behavior: 'always_invoice'
+    });
+
+    res.json({ subscription: updatedSubscription });
+  } catch (error) {
+    console.error('Error updating subscription:', error);
+    res.status(500).json({ error: 'Failed to update subscription' });
+  }
+});
+
+// Cancel subscription
+app.post('/cancel-subscription', async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing user ID' });
+    }
+
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const subscriptions = await stripe.subscriptions.list({
+      customer: userDoc.data().stripeCustomerId,
+      limit: 1,
+      status: 'active'
+    });
+
+    if (subscriptions.data.length === 0) {
+      return res.status(404).json({ error: 'No active subscription found' });
+    }
+
+    await stripe.subscriptions.update(subscriptions.data[0].id, {
+      cancel_at_period_end: true
     });
 
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Erro ao verificar pagamento:', error);
-    res.status(500).json({ error: 'Erro ao verificar pagamento' });
+    console.error('Error canceling subscription:', error);
+    res.status(500).json({ error: 'Failed to cancel subscription' });
   }
 });
 
-// 🔔 Webhook do Stripe para pagamentos concluídos
+// Get subscription status
+app.get('/subscription-status', async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing user ID' });
+    }
+
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.json({ status: 'none' });
+    }
+
+    const subscriptions = await stripe.subscriptions.list({
+      customer: userDoc.data().stripeCustomerId,
+      limit: 1,
+      status: 'active'
+    });
+
+    if (subscriptions.data.length === 0) {
+      return res.json({ status: 'none' });
+    }
+
+    const subscription = subscriptions.data[0];
+    res.json({
+      status: subscription.status,
+      planId: subscription.items.data[0].price.id,
+      currentPeriodEnd: subscription.current_period_end,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end
+    });
+  } catch (error) {
+    console.error('Error getting subscription status:', error);
+    res.status(500).json({ error: 'Failed to get subscription status' });
+  }
+});
+
+// Webhook handler
 app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
+  
+  if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return res.status(400).json({ error: 'Missing signature or webhook secret' });
+  }
 
-  let event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('❌ Erro na verificação do Webhook:', err.message);
-    return res.status(400).send(`Erro no Webhook: ${err.message}`);
-  }
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    try {
-      const { userId, credits } = session.metadata;
-      const creditsToAdd = parseInt(credits, 10);
-      const userRef = db.collection('users').doc(userId);
-
-      await db.runTransaction(async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists) throw new Error('Usuário não encontrado');
-
-        const newCredits = (userDoc.data().credits || 0) + creditsToAdd;
-
-        transaction.update(userRef, {
-          credits: newCredits,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      });
-
-      console.log(`✅ Créditos adicionados para o usuário ${userId}: ${creditsToAdd}`);
-    } catch (error) {
-      console.error('❌ Erro ao processar Webhook:', error);
+    switch (event.type) {
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+        await handleSubscriptionChange(event.data.object);
+        break;
+      case 'customer.subscription.deleted':
+        await handleSubscriptionCanceled(event.data.object);
+        break;
     }
-  }
 
-  res.json({ received: true });
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(400).json({ error: error.message });
+  }
 });
 
-// 🚀 Iniciar o servidor
+async function handleSubscriptionChange(subscription) {
+  try {
+    const userId = subscription.metadata.userId;
+    if (!userId) return;
+
+    await db.collection('users').doc(userId).update({
+      subscriptionStatus: subscription.status,
+      subscriptionPlan: subscription.items.data[0].price.id,
+      subscriptionPeriodEnd: subscription.current_period_end,
+      updatedAt: new Date()
+    });
+  } catch (error) {
+    console.error('Error handling subscription change:', error);
+  }
+}
+
+async function handleSubscriptionCanceled(subscription) {
+  try {
+    const userId = subscription.metadata.userId;
+    if (!userId) return;
+
+    await db.collection('users').doc(userId).update({
+      subscriptionStatus: 'canceled',
+      subscriptionPlan: null,
+      subscriptionPeriodEnd: null,
+      updatedAt: new Date()
+    });
+  } catch (error) {
+    console.error('Error handling subscription cancellation:', error);
+  }
+}
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`✅ Servidor rodando na porta ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

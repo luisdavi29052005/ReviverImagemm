@@ -2,10 +2,18 @@ import { loadStripe } from '@stripe/stripe-js';
 import type { SubscriptionPlan } from '../types';
 import { auth } from './firebase';
 
-const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
-const stripePromise = loadStripe(STRIPE_PUBLIC_KEY);
+// Make sure to use the correct environment variable
+const STRIPE_PUBLIC_KEY = import.meta.env.STRIPE_PUBLIC_KEY;
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://www.reviverimagem.shop/api";
+// Initialize Stripe only if we have a public key
+const stripePromise = STRIPE_PUBLIC_KEY 
+  ? loadStripe(STRIPE_PUBLIC_KEY)
+  : Promise.reject(new Error('Stripe public key is not configured'));
+
+// Use HTTP instead of HTTPS for local development
+const API_BASE_URL = import.meta.env.NODE_ENV === 'development' 
+  ? 'http://localhost:5000'
+  : 'https://www.reviverimagem.shop/api';
 
 export const subscriptionPlans = {
   free: {
@@ -68,6 +76,13 @@ export async function createSubscription(plan: SubscriptionPlan) {
       throw new Error('User not authenticated');
     }
 
+    // Initialize Stripe
+    const stripe = await stripePromise;
+    if (!stripe) {
+      throw new Error('Stripe failed to initialize');
+    }
+
+    // Create checkout session
     const response = await fetch(`${API_BASE_URL}/create-subscription`, {
       method: 'POST',
       headers: {
@@ -86,12 +101,7 @@ export async function createSubscription(plan: SubscriptionPlan) {
     }
 
     const session = await response.json();
-    const stripe = await stripePromise;
     
-    if (!stripe) {
-      throw new Error('Failed to load Stripe');
-    }
-
     const { error } = await stripe.redirectToCheckout({
       sessionId: session.id,
     });

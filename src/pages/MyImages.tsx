@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ImagePlus, Download, Settings, Image as ImageIcon, Info, Upload, Cloud, X, FileText, Home, Menu, RefreshCw } from 'lucide-react';
+import { ImagePlus, Download, Settings, Image as ImageIcon, Info, Upload, Cloud, X, FileText, Home, Menu, RefreshCw, ArrowLeft, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../lib/firebase';
@@ -492,52 +492,73 @@ function MyImages() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="absolute right-0 top-0 bottom-0 w-full sm:w-80 bg-[#1C1C1E] p-4 gap-2 flex flex-col"
+              className="absolute right-0 top-0 bottom-0 w-full sm:w-80 bg-[#1C1C1E] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-700">
-                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-purple-500">
-                  <img
-                    src={user?.photoURL || `https://api.dicebear.com/7.x/avatars/svg?seed=${user?.email}`}
-                    alt="Foto de perfil"
-                    className="w-full h-full object-cover"
-                  />
+              <div className="p-4 space-y-4">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 rounded-lg text-white hover:bg-gray-700 transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                  <span>Voltar para Minhas Imagens</span>
+                </motion.button>
+
+                <div className="flex items-center gap-4 py-4 border-t border-gray-800">
+                  <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-purple-500">
+                    <img
+                      src={user?.photoURL || `https://api.dicebear.com/7.x/avatars/svg?seed=${user?.email}`}
+                      alt="Foto de perfil"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-medium text-white">{user?.displayName || 'Usuário'}</p>
+                    <p className="text-sm text-gray-400">{user?.email}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-white">{user?.displayName || 'Usuário'}</p>
-                  <p className="text-sm text-gray-400">{user?.email}</p>
+
+                <div className="space-y-3 py-4 border-t border-gray-800">
+                  {['Aprimorador', 'Gerador', 'Novo'].map((item) => (
+                    <motion.button
+                      key={item}
+                      whileTap={{ scale: 0.95 }}
+                      className={`w-full px-4 py-3 rounded-lg ${
+                        item === 'Aprimorador' 
+                          ? 'bg-purple-600 text-white' 
+                          : 'bg-gray-800 text-gray-300'
+                      }`}
+                    >
+                      {item}
+                    </motion.button>
+                  ))}
+                </div>
+
+                <div className="space-y-3 py-4 border-t border-gray-800">
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      navigate('/settings');
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 rounded-lg text-gray-300"
+                  >
+                    <Settings className="w-5 h-5" />
+                    <span>Configurações</span>
+                  </motion.button>
+
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => auth.signOut()}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 rounded-lg text-red-500"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>Sair</span>
+                  </motion.button>
                 </div>
               </div>
-
-              {['Aprimorador', 'Gerador', 'Novo'].map((item) => (
-                <motion.button
-                  key={item}
-                  whileTap={{ scale: 0.95 }}
-                  className={`w-full px-4 py-2 rounded-lg ${
-                    item === 'Aprimorador' 
-                      ? 'bg-purple-600 text-white' 
-                      : 'bg-gray-700 text-gray-300'
-                  }`}
-                >
-                  {item}
-                </motion.button>
-              ))}
-
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => navigate('/settings')}
-                className="w-full flex items-center justify-center px-4 py-2 rounded-lg bg-gray-700 text-gray-300"
-              >
-                <span>Configurações</span>
-              </motion.button>
-
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => auth.signOut()}
-                className="w-full px-4 py-2 rounded-lg bg-red-600/20 text-red-500"
-              >
-                Sair
-              </motion.button>
             </motion.div>
           </motion.div>
         )}
@@ -605,4 +626,3 @@ function MyImages() {
 }
 
 export default MyImages;
-

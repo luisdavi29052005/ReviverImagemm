@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Settings, User, Images } from 'lucide-react';
+import { LogOut, Settings, User, Images, Menu, X, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../lib/firebase';
 
@@ -47,7 +47,7 @@ function DesktopUserMenu() {
               alt="Foto de perfil"
               className="w-full h-full object-cover"
               onError={(e: any) => {
-                e.target.src = 'https://via.placeholder.com/150'; // Fallback estático
+                e.target.src = 'https://via.placeholder.com/150';
               }}
             />
           </div>
@@ -126,7 +126,7 @@ function MobileUserMenu() {
             alt="Foto de perfil"
             className="w-full h-full object-cover"
             onError={(e: any) => {
-              e.target.src = 'https://via.placeholder.com/150'; // Fallback estático
+              e.target.src = 'https://via.placeholder.com/150';
             }}
           />
         </div>
@@ -135,79 +135,92 @@ function MobileUserMenu() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-x-0 top-16 bg-gray-800 border-t border-gray-700"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50"
+            onClick={() => setIsOpen(false)}
           >
-            <div className="p-4">
-              {/* User Profile Section */}
-              <div className="flex items-center space-x-3 pb-4 border-b border-gray-700">
-                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-purple-500">
-                  <img
-                    src={
-                      user?.photoURL ||
-                      `https://api.dicebear.com/7.x/avatars/svg?seed=${encodeURIComponent(
-                        user?.email || 'default'
-                      )}`
-                    }
-                    alt="Foto de perfil"
-                    className="w-full h-full object-cover"
-                    onError={(e: any) => {
-                      e.target.src = 'https://via.placeholder.com/150'; // Fallback estático
-                    }}
-                  />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="absolute right-0 top-0 bottom-0 w-full max-w-[320px] bg-gray-900 overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-6 space-y-6">
+                {/* Back Button */}
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+                >
+                  <ArrowLeft size={20} />
+                  <span>Voltar</span>
+                </motion.button>
+
+                {/* User Profile */}
+                <div className="flex items-center gap-4 pb-6 border-b border-gray-800">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-purple-500">
+                    <img
+                      src={user?.photoURL || `https://api.dicebear.com/7.x/avatars/svg?seed=${user?.email}`}
+                      alt="Foto de perfil"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium text-white">
+                      {user?.displayName || 'Usuário'}
+                    </h3>
+                    <p className="text-sm text-gray-400">{user?.email}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-white">
-                    {user?.displayName || 'Usuário'}
-                  </p>
-                  <p className="text-sm text-gray-400">{user?.email}</p>
+
+                {/* Navigation */}
+                <div className="space-y-4">
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleNavigate('/my-images')}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-purple-600 text-white"
+                  >
+                    <span>Minhas Imagens</span>
+                    <Images size={20} />
+                  </motion.button>
+
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleNavigate('/profile')}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
+                  >
+                    <span>Perfil</span>
+                    <User size={20} />
+                  </motion.button>
+
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleNavigate('/settings')}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
+                  >
+                    <span>Configurações</span>
+                    <Settings size={20} />
+                  </motion.button>
+                </div>
+
+                {/* Logout */}
+                <div className="pt-6 border-t border-gray-800">
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => auth.signOut()}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                  >
+                    <span>Sair da conta</span>
+                    <LogOut size={20} />
+                  </motion.button>
                 </div>
               </div>
-
-              {/* Navigation Options */}
-<div className="mt-4">
-  {/* Botão "Minhas Imagens" com margem inferior */}
-  <motion.button
-    whileTap={{ scale: 0.95 }}
-    onClick={() => handleNavigate('/my-images')}
-    className="w-full flex items-center justify-between px-4 py-2 rounded-lg bg-purple-600 text-white mb-4"
-  >
-    <span>Minhas Imagens</span>
-    <Images size={16} />
-  </motion.button>
-
-  {/* Container com os demais itens */}
-  <div className="space-y-2">
-    <motion.button
-      whileTap={{ scale: 0.95 }}
-      onClick={() => handleNavigate('/profile')}
-      className="w-full flex items-center justify-between px-4 py-2 rounded-lg bg-gray-700 text-gray-300"
-    >
-      <span>Perfil</span>
-      <User size={16} />
-    </motion.button>
-    <motion.button
-      whileTap={{ scale: 0.95 }}
-      onClick={() => handleNavigate('/settings')}
-      className="w-full flex items-center justify-between px-4 py-2 rounded-lg bg-gray-700 text-gray-300"
-    >
-      <span>Configurações</span>
-      <Settings size={16} />
-    </motion.button>
-    <motion.button
-      whileTap={{ scale: 0.95 }}
-      onClick={() => auth.signOut()}
-      className="w-full px-4 py-2 rounded-lg bg-red-600/20 text-red-500"
-    >
-      Sair
-    </motion.button>
-  </div>
-</div>
-
-           
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

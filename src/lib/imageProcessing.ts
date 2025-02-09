@@ -27,7 +27,7 @@ export async function processImage(file: File, settings: ImageProcessingSettings
 
     console.log('Sending request to process image...');
 
-    const response = await fetch('https://pythonflask-production-dcf9.up.railway.app/upload', {
+    const response = await fetch('https://api.reviverimagem.shop/upload', {
       method: 'POST',
       body: formData,
     });
