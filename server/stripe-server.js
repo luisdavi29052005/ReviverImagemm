@@ -100,7 +100,7 @@ app.post('/create-subscription', async (req, res) => {
     }
 
     // Determine the success and cancel URLs based on the request origin
-    const origin = req.get('origin') || 'http://localhost:3000';
+    const origin = req.get('origin') || 'https://reviver-imagemm-server-v946gcy7p-davis-projects-f055a2bc.vercel.app';
     const successUrl = `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${origin}/payment/cancel`;
 
@@ -331,7 +331,10 @@ async function handleSubscriptionCanceled(subscription) {
     console.error('Error handling subscription cancellation:', error);
   }
 }
-
+// Rota para testar se o servidor está rodando corretamente
+app.get('/upa', (req, res) => {
+  res.send('Reviver Imagemm Server is running!');
+});
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

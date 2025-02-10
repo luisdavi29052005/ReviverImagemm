@@ -16,7 +16,7 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    const allowedOrigins = ['http://localhost:3000', 'https://www.reviverimagem.shop'];
+    const allowedOrigins = ['https://reviver-imagemm-server-v946gcy7p-davis-projects-f055a2bc.vercel.app', 'https://www.reviverimagem.shop'];
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -71,7 +71,7 @@ app.post('/create-subscription', async (req, res) => {
     }
 
     // Get origin for success/cancel URLs
-    const origin = req.get('origin') || 'http://localhost:3000';
+    const origin = req.get('origin') || 'https://reviver-imagemm-server-v946gcy7p-davis-projects-f055a2bc.vercel.app';
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -104,6 +104,11 @@ app.post('/create-subscription', async (req, res) => {
     console.error('Error creating checkout session:', error);
     res.status(500).json({ error: 'Failed to create checkout session' });
   }
+});
+
+// Rota para testar se o servidor está rodando corretamente
+app.get('/up', (req, res) => {
+  res.send('Reviver Imagemm Server is running!');
 });
 
 const PORT = process.env.PORT || 5000;
