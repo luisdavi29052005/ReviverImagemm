@@ -1,4 +1,4 @@
-import express from 'express';
+import express from 'express'; 
 import Stripe from 'stripe';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -7,261 +7,138 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 dotenv.config();
 
-// Initialize Stripe with error handling
-const VITE_STRIPE_SECRET_KEY = process.env.VITE_STRIPE_SECRET_KEY;
-if (!VITE_STRIPE_SECRET_KEY) {
-  throw new Error('Missing Stripe secret key');
+// Configuração do domínio
+const isProduction = process.env.NODE_ENV === 'production';
+const BASE_URL = isProduction ? 'https://www.reviverimagem.shop' : 'http://localhost:5000';
+
+// Inicialização segura do Stripe
+const stripeSecretKey = process.env.VITE_STRIPE_SECRET_KEY;
+if (!stripeSecretKey) {
+  throw new Error('Erro: Chave secreta do Stripe ausente.');
 }
-const stripe = new Stripe(VITE_STRIPE_SECRET_KEY);
+const stripe = new Stripe(stripeSecretKey);
 
+// Configuração do servidor
 const app = express();
+app.use(express.json());
 
-// Configure CORS to accept both production and development origins
+// Configuração CORS
 const allowedOrigins = [
   'https://www.reviverimagem.shop',
-  'http://localhost:3000', // Adicionado para desenvolvimento
+  'http://localhost:3000',
   'http://localhost:5000',
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Permite requisições sem origin
-    if (allowedOrigins.includes(origin)) {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
-  optionsSuccessStatus: 204,
 }));
 
-// Permite preflight requests para todas as rotas
-app.options('*', cors());
-
-// Parse JSON payloads
-app.use(express.json());
-
-// Initialize Firebase Admin
+// Inicialização do Firebase
+if (!process.env.VITE_FIREBASE_PRIVATE_KEY) {
+  throw new Error('Erro: Chave privada do Firebase não configurada.');
+}
 initializeApp({
   credential: cert({
     projectId: process.env.VITE_FIREBASE_PROJECT_ID,
     clientEmail: process.env.VITE_FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.VITE_FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    privateKey: process.env.VITE_FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   }),
 });
-
 const db = getFirestore();
 
-// Subscription plans matching the frontend
+// Planos de assinatura
 const subscriptionPlans = {
-  free: {
-    id: 'free',
-    name: 'Plano Gratuito',
-    credits: 10,
-    price: 0,
-    description: '10 créditos diários',
-  },
-  basic: {
-    id: 'basic',
-    name: 'Plano Básico',
-    credits: 100,
-    price: 29.9,
-    description: '100 créditos diários',
-  },
-  pro: {
-    id: 'pro',
-    name: 'Plano Profissional',
-    credits: 200,
-    price: 49.9,
-    description: '200 créditos diários',
-  },
-  enterprise: {
-    id: 'enterprise',
-    name: 'Plano Enterprise',
-    credits: 300,
-    price: 79.9,
-    description: '300 créditos diários',
-  },
+  free: { id: 'free', name: 'Plano Gratuito', credits: 10, price: 0 },
+  basic: { id: 'basic', name: 'Plano Básico', credits: 100, price: 29.9 },
+  pro: { id: 'pro', name: 'Plano Profissional', credits: 200, price: 49.9 },
+  enterprise: { id: 'enterprise', name: 'Plano Enterprise', credits: 300, price: 79.9 },
 };
 
-// Create subscription checkout session
-app.post('/create-subscription', async (req, res) => {
+// Criar sessão de pagamento para assinatura
+app.post('/api/create-subscription', async (req, res) => {
   try {
     const { planId, userId, userEmail } = req.body;
     if (!planId || !userId || !userEmail) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
     }
+
     const plan = subscriptionPlans[planId];
     if (!plan) {
-      return res.status(400).json({ error: 'Invalid plan' });
+      return res.status(400).json({ error: 'Plano inválido.' });
     }
 
-    // Determine the success and cancel URLs based on the request origin
-    const origin = req.get('origin') || 'https://reviver-imagemm-server-v946gcy7p-davis-projects-f055a2bc.vercel.app';
-    const successUrl = `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${origin}/payment/cancel`;
-
+    const origin = req.get('origin') || BASE_URL;
     const session = await stripe.checkout.sessions.create({
       customer_email: userEmail,
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'brl',
-            product_data: {
-              name: plan.name,
-              description: `${plan.credits} créditos diários`,
-            },
-            unit_amount: Math.round(plan.price * 100), // Convert to cents
-            recurring: {
-              interval: 'month',
-            },
-          },
-          quantity: 1,
+      line_items: [{
+        price_data: {
+          currency: 'brl',
+          product_data: { name: plan.name, description: `${plan.credits} créditos diários` },
+          unit_amount: Math.round(plan.price * 100),
+          recurring: { interval: 'month' },
         },
-      ],
+        quantity: 1,
+      }],
       mode: 'subscription',
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: {
-        userId,
-        planId,
-        credits: plan.credits.toString(),
-      },
+      success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/payment/cancel`,
+      metadata: { userId, planId, credits: plan.credits.toString() },
     });
 
     res.json({ id: session.id });
   } catch (error) {
-    console.error('Error creating subscription:', error);
-    res.status(500).json({ error: 'Failed to create subscription' });
+    console.error('Erro ao criar assinatura:', error);
+    res.status(500).json({ error: 'Erro ao criar assinatura.' });
   }
 });
 
-// Update subscription
-app.post('/update-subscription', async (req, res) => {
-  try {
-    const { userId, newPlanId } = req.body;
-    if (!userId || !newPlanId) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const subscriptions = await stripe.subscriptions.list({
-      customer: userDoc.data().stripeCustomerId,
-      limit: 1,
-      status: 'active',
-    });
-    if (subscriptions.data.length === 0) {
-      return res.status(404).json({ error: 'No active subscription found' });
-    }
-    const subscription = subscriptions.data[0];
-    const plan = subscriptionPlans[newPlanId];
-    if (!plan) {
-      return res.status(400).json({ error: 'Invalid plan' });
-    }
-    const updatedSubscription = await stripe.subscriptions.update(subscription.id, {
-      items: [
-        {
-          id: subscription.items.data[0].id,
-          price_data: {
-            currency: 'brl',
-            product_data: {
-              name: plan.name,
-              description: `${plan.credits} créditos diários`,
-            },
-            unit_amount: Math.round(plan.price * 100),
-            recurring: {
-              interval: 'month',
-            },
-          },
-        },
-      ],
-      proration_behavior: 'always_invoice',
-    });
-    res.json({ subscription: updatedSubscription });
-  } catch (error) {
-    console.error('Error updating subscription:', error);
-    res.status(500).json({ error: 'Failed to update subscription' });
-  }
-});
-
-// Cancel subscription
-app.post('/cancel-subscription', async (req, res) => {
-  try {
-    const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing user ID' });
-    }
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const subscriptions = await stripe.subscriptions.list({
-      customer: userDoc.data().stripeCustomerId,
-      limit: 1,
-      status: 'active',
-    });
-    if (subscriptions.data.length === 0) {
-      return res.status(404).json({ error: 'No active subscription found' });
-    }
-    await stripe.subscriptions.update(subscriptions.data[0].id, {
-      cancel_at_period_end: true,
-    });
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error canceling subscription:', error);
-    res.status(500).json({ error: 'Failed to cancel subscription' });
-  }
-});
-
-// Get subscription status
-app.get('/subscription-status', async (req, res) => {
+// Obter status da assinatura
+app.get('/api/subscription-status', async (req, res) => {
   try {
     const { userId } = req.query;
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing user ID' });
-    }
+    if (!userId) return res.status(400).json({ error: 'ID do usuário ausente.' });
+
     const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-      return res.json({ status: 'none' });
-    }
+    if (!userDoc.exists) return res.json({ status: 'none' });
+
     const subscriptions = await stripe.subscriptions.list({
       customer: userDoc.data().stripeCustomerId,
       limit: 1,
       status: 'active',
     });
-    if (subscriptions.data.length === 0) {
-      return res.json({ status: 'none' });
-    }
+
+    if (subscriptions.data.length === 0) return res.json({ status: 'none' });
+
     const subscription = subscriptions.data[0];
     res.json({
       status: subscription.status,
-      planId: subscription.items.data[0].price.id,
+      planId: subscription.items.data[0].price.product,
       currentPeriodEnd: subscription.current_period_end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
     });
   } catch (error) {
-    console.error('Error getting subscription status:', error);
-    res.status(500).json({ error: 'Failed to get subscription status' });
+    console.error('Erro ao obter status da assinatura:', error);
+    res.status(500).json({ error: 'Erro ao obter status da assinatura.' });
   }
 });
 
-// Webhook handler
-app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+// Webhook do Stripe
+app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
-
   if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) {
-    return res.status(400).json({ error: 'Missing signature or webhook secret' });
+    return res.status(400).json({ error: 'Assinatura ou segredo do webhook ausente.' });
   }
+
   try {
-    const event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
+    const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
@@ -273,30 +150,34 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
     }
     res.json({ received: true });
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('Erro no Webhook:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
+// Função para atualizar Firestore ao mudar assinatura
 async function handleSubscriptionChange(subscription) {
   try {
     const userId = subscription.metadata.userId;
     if (!userId) return;
+
     await db.collection('users').doc(userId).update({
       subscriptionStatus: subscription.status,
-      subscriptionPlan: subscription.items.data[0].price.id,
+      subscriptionPlan: subscription.items.data[0].price.product,
       subscriptionPeriodEnd: subscription.current_period_end,
       updatedAt: new Date(),
     });
   } catch (error) {
-    console.error('Error handling subscription change:', error);
+    console.error('Erro ao atualizar assinatura no Firestore:', error);
   }
 }
 
+// Função para remover assinatura cancelada
 async function handleSubscriptionCanceled(subscription) {
   try {
     const userId = subscription.metadata.userId;
     if (!userId) return;
+
     await db.collection('users').doc(userId).update({
       subscriptionStatus: 'canceled',
       subscriptionPlan: null,
@@ -304,16 +185,12 @@ async function handleSubscriptionCanceled(subscription) {
       updatedAt: new Date(),
     });
   } catch (error) {
-    console.error('Error handling subscription cancellation:', error);
+    console.error('Erro ao remover assinatura cancelada:', error);
   }
 }
 
-// Rota para testar se o servidor está rodando corretamente
-app.get('/upa', (req, res) => {
-  res.send('Reviver Imagemm Server is running!');
-});
+// Teste do servidor
+app.get('/api', (req, res) => res.send('Servidor Reviver Imagem rodando!'));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}, disponível em ${BASE_URL}`));

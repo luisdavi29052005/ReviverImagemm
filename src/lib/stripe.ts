@@ -11,9 +11,9 @@ const stripePromise = VITE_STRIPE_PUBLIC_KEY
   : Promise.reject(new Error('Stripe public key is not configured'));
 
 // Use HTTP instead of HTTPS for local development
-const API_BASE_URL = import.meta.env.NODE_ENV === 'development' 
-  ? 'http://localhost:5000'
-  : 'https://www.reviverimagem.shop';
+const API_BASE_URL = import.meta.env.MODE === 'development' 
+  ? 'http://localhost:5000' 
+  : 'https://www.reviverimagem.shop/api';
 
 export const subscriptionPlans = {
   free: {
