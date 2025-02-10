@@ -1,12 +1,6 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "server/stripe-server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/server/stripe-server.js" }
-  ]
-}
+    "rewrites": [
+      { "source": "/(.*)", "destination": "/" }
+    ]
+  }
+  
