@@ -10,12 +10,7 @@
       "use": "@vercel/static"
     }
   ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/server/index.js" },
-    { "src": "/(.*)", "dest": "/dist/$1" },
-    { "src": "/", "dest": "/dist/index.html" }
-  ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://www.reviverimagem.shop/api/$1" }
+    { "source": "/api/(.*)", "destination": "/server/index.js" }
   ]
 }
