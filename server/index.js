@@ -16,7 +16,7 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    const allowedOrigins = ['https://reviver-imagemm-server-v946gcy7p-davis-projects-f055a2bc.vercel.app', 'https://www.reviverimagem.shop'];
+    const allowedOrigins = ['https://www.reviverimagem.shop'];
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {

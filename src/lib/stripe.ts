@@ -3,17 +3,17 @@ import type { SubscriptionPlan } from '../types';
 import { auth } from './firebase';
 
 // Make sure to use the correct environment variable
-const STRIPE_PUBLIC_KEY = import.meta.env.STRIPE_PUBLIC_KEY;
+const VITE_STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
 
 // Initialize Stripe only if we have a public key
-const stripePromise = STRIPE_PUBLIC_KEY 
-  ? loadStripe(STRIPE_PUBLIC_KEY)
+const stripePromise = VITE_STRIPE_PUBLIC_KEY 
+  ? loadStripe(VITE_STRIPE_PUBLIC_KEY)
   : Promise.reject(new Error('Stripe public key is not configured'));
 
 // Use HTTP instead of HTTPS for local development
 const API_BASE_URL = import.meta.env.NODE_ENV === 'development' 
   ? 'http://localhost:5000'
-  : 'https://www.reviverimagem.shop/api';
+  : 'https://www.reviverimagem.shop';
 
 export const subscriptionPlans = {
   free: {
